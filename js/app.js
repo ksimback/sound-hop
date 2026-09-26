@@ -1,9 +1,10 @@
 import { h, shuffle, pick, sleep, confetti } from './ui.js';
 import { S, save, grade, finishLevel, markDay, addMinutes, reset, importJSON, box } from './store.js';
-import { unlock, loadRecordedList, say, stopAll, speak } from './audio.js';
+import { unlock, loadRecordedList, say, stopAll, speak, loadClips } from './audio.js';
 import { LEVELS, STAGES } from './curriculum.js';
 import { buildLevel, buildWarmup } from './engine.js';
 import { ACTIVITIES, sfx } from './activities.js';
+import { LINES } from './narration.js';
 import { parentZone, gate, onboarding } from './parent.js';
 
 const app = document.getElementById('app');
@@ -115,9 +116,8 @@ function results(level, { passed, stars, sticker }) {
   const nextIdx = s.levelIdx;
   const finished = nextIdx >= LEVELS.length;
   const starRow = h('div', { class: 'stars-big' }, [0, 1, 2].map(i => h('span', { class: i < stars ? '' : 'off', style: { animationDelay: `${i * 0.25}s` } }, '⭐')));
-  const msg = passed
-    ? (level.final ? `You can read books now, ${s.child.name || 'superstar'}!` : tired ? 'Amazing work today! Time for a break?' : 'You did it!')
-    : "Good try! Let's practice this one again.";
+  const spoken = passed ? (level.final ? LINES.graduated : tired ? LINES.passedTired : LINES.passed) : LINES.failed;
+  const msg = level.final && passed ? `You can read books now, ${s.child.name || 'superstar'}!` : spoken;
   const buttons = h('div', { class: 'home-actions' });
   if (!passed) buttons.append(h('button', { class: 'btn', onclick: () => playLevel(level.id - 1) }, '🔁 Try again'));
   else if (!finished) buttons.append(h('button', { class: tired ? 'btn ghost' : 'btn', onclick: () => playLevel(nextIdx) }, 'Next ➜'));
@@ -129,7 +129,7 @@ function results(level, { passed, stars, sticker }) {
     sticker ? h('div', {}, h('div', { class: 'sticker-new' }, sticker), h('div', { class: 'prompt' }, 'New sticker!')) : null,
     buttons)));
   if (passed) { sfx.good(); confetti(level.type === 'check' || level.type === 'story' ? 220 : 120); }
-  speak([msg, ...(sticker ? ['You got a new sticker!'] : [])]);
+  speak([spoken, ...(sticker ? [LINES.sticker] : [])]);
 }
 
 // Runs a list of steps. Wrong first tries are retested a few steps later (not re-scored).
@@ -177,6 +177,7 @@ async function run(steps, { idx, title }) {
 // ---------- boot ----------
 async function boot() {
   try { await loadRecordedList(); } catch (e) { console.warn(e); }
+  await loadClips();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => { });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => { });
   if (!S().onboarded) onboarding(app, () => go('home'));

@@ -2,35 +2,39 @@
 // sentence, and a full explanation the first time each kind of activity appears in a lesson.
 // Parts: strings are spoken, {sound} plays a parent recording, {blend} chains recordings,
 // {pause} waits. Letters are never called by name (Mentava: sounds, not names).
+//
+// Every spoken string must be a plain literal in this file (no templates): tools/phrases.mjs
+// collects them all so the natural-voice audio can be pre-generated.
 import { keyLabel, keySound } from './phonics.js';
-import { pick } from './ui.js';
 
 const S = (id) => ({ sound: id });
 const P = (ms) => ({ pause: ms });
-const count = (n) => ['', 'one', 'two', 'three', 'four', 'five'][n] ?? String(n);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 // ---------- lesson openings ----------
-export function lessonOpening(level, newKeys, name, returning, canRead) {
-  const hi = pick(returning ? [`Hi ${name}!`, `Hello ${name}!`, `Welcome back, ${name}!`] : [`Hi ${name}!`, `Hello ${name}!`]);
+const LEARN_COUNT = ['', "Today we're going to learn a new sound!", "Today we're going to learn two new sounds!", "Today we're going to learn three new sounds!"];
+
+export function lessonOpening(level, newKeys, returning, canRead) {
+  const hi = pick(returning ? ['Hi there!', 'Hello again!', 'Welcome back!'] : ['Hi there!', 'Hello!']);
   switch (level.type) {
     case 'new': {
       if (!newKeys.length) return [hi, "Today we're going to read longer words, with more sounds in a row.", 'Remember to say every sound, and keep your voice going.', "Let's begin!"];
       const n = newKeys.length;
-      const parts = [hi, `Today we're going to learn ${n === 1 ? 'a new sound' : count(n) + ' new sounds'}!`];
+      const parts = [hi, LEARN_COUNT[n] ?? LEARN_COUNT[3]];
       newKeys.forEach((k, i) => {
         const which = n === 1 ? 'Here it is.' : i === 0 ? 'Here is the first one.' : i === n - 1 ? (n === 2 ? 'And here is the second one.' : 'And here is the last one.') : 'Here is the next one.';
         const team = keyLabel(k).replace('_', '').length > 1;
         parts.push(which, team ? 'These letters say' : 'This letter says', S(keySound(k)));
       });
       parts.push(P(400), n === 1 ? "First we'll meet it, and then you'll practice it." : "First we'll meet each one, and then you'll practice them.");
-      if (canRead) parts.push(`Then we'll read some words and sentences with ${n === 1 ? 'it' : 'them'}.`);
+      if (canRead) parts.push(n === 1 ? "Then we'll read some words and sentences with it." : "Then we'll read some words and sentences with them.");
       parts.push("Let's begin!");
       return parts;
     }
     case 'ready': return [hi, "Today we're going to practice two big reading skills.", 'First, reading from left to right, like a frog hopping across the lily pads.', 'Then, listening to sounds and putting them together to make a word.', "Let's begin!"];
     case 'heart': return [hi, "Today we're going to learn some heart words.", "Heart words are special words that don't follow the usual rules.", 'So we learn them by heart!', "Let's meet them."];
     case 'review': return [hi, 'Today is a practice day!', "We'll practice the sounds and words you already know, so they stay strong in your brain.", "Let's begin!"];
-    case 'check': return [hi, "Today is a big check! It's a chance to show everything you've learned.", "Take your time, and listen carefully. You can tap the speaker to hear things again.", "Let's begin!"];
+    case 'check': return [hi, "Today is a big check! It's a chance to show everything you've learned.", 'Take your time, and listen carefully. You can tap the speaker to hear things again.', "Let's begin!"];
     case 'story': return [hi, "It's story time!", 'Today, you are going to read a whole story, all by yourself.', 'Read each page out loud. If a word is tricky, tap it, and I will help you sound it out.', 'When you finish a page, tap next page.', "Let's read!"];
     case 'warmup': return [hi, "Let's warm up first!", "I'll ask you about some things you learned before, so you don't forget them.", 'Ready?'];
   }
@@ -60,6 +64,16 @@ export function introScript(key, words) {
 export function heartIntroScript(word) {
   return ['Here is a heart word.', 'This word says', word, P(300), 'Listen again:', word, P(300), 'Now you say it!', P(1800), 'Good! Look at it closely, so you remember it.', 'When you are ready, tap next.'];
 }
+
+// Short explanations shown between activities.
+export const TIPS = {
+  sz: { title: 's can say z', text: 'At the end of some words, s buzzes like z: dogs, beds, pins.' },
+  blendStart: { title: 'Two letters in a row', text: 'Some words start with two sounds in a row, like frog. Say every sound, and keep your voice going. Then say it fast!' },
+  blendEnd: { title: 'Two letters at the end', text: 'Some words end with two sounds in a row, like hand. Say every sound, and keep your voice going. Then say it fast!' },
+  open: { title: 'Open vowels', text: 'When a vowel is at the end of a short word, it says its name: he, me, we, go, no, hi!' },
+  nk: { title: 'n before k', text: 'When n comes right before k, it makes a humming sound, like in sink, bank, and pink.' },
+  ok: 'Tap OK when you are ready.',
+};
 
 // ---------- activity prompts: full the first time in a lesson, short after ----------
 export const PROMPTS = {
@@ -100,7 +114,7 @@ export const PROMPTS = {
     ? ["Let's listen really carefully.", 'Some sounds are almost the same!', 'I will say a word. Tap the sound you hear in it.', 'Listen:', st.word, P(400), 'Do you hear', S(st.a), 'or', S(st.b)]
     : ['Listen:', st.word, P(400), 'Do you hear', S(st.a), 'or', S(st.b)],
   voice: (st, first) => first
-    ? ["This is the flying bird game!", 'Slide the bird under the word, and say each sound out loud as you go.', 'Keep your voice going, without stopping, and the bird keeps flying!', 'If you stop, the bird falls down. Then you can try again.', 'Ready? Slide and say!']
+    ? ['This is the flying bird game!', 'Slide the bird under the word, and say each sound out loud as you go.', 'Keep your voice going, without stopping, and the bird keeps flying!', 'If you stop, the bird falls down. Then you can try again.', 'Ready? Slide and say!']
     : ['Slide and say the sounds. Keep your voice going!'],
   quiz: (st, first) => first
     ? ["Let's see what you remember about the story.", st.q.q]
@@ -111,13 +125,36 @@ export const PROMPTS = {
 export const WRONG = {
   tapSound: (st) => { const s = S(keySound(st.key)); return ['Not quite.', 'Listen again:', s, P(300), 'This letter says', s, 'Tap it!']; },
   firstSound: (st) => [st.word, 'starts with', S(keySound(st.key)), P(300), 'Tap that letter!'],
-  oralBlend: (st) => { const b = { blend: st.entry.toks.filter(t => t.s !== '_').map(t => t.s) }; return ['Listen again:', b, P(300), 'That makes', st.entry.word, 'Tap the', st.entry.word, '!']; },
+  oralBlend: (st) => { const b = { blend: st.entry.toks.filter(t => t.s !== '_').map(t => t.s) }; return ['Listen again:', b, P(300), 'That makes', st.entry.word, P(300), 'Tap the picture!']; },
+  dir: (target) => ['Not quite. Hop from left to right:', target, 'Tap it!'],
+  readWord: ["Not quite. Let's sound it out together."],
   pickWord: (st) => ['Not quite. Look at every letter.', 'This one says', st.entry.word, 'Tap it!'],
   heartPick: (st) => ['Not quite. This one says', st.word, 'Tap it!'],
   sentence: (st) => ['Let me read it to you.', st.s.text, P(300), 'Now find the picture that matches.'],
   yesno: (st) => ['Let me read it to you.', st.q.text, P(300), 'Think about it. Yes, or no?'],
   compare: (st) => ['Listen again:', st.word, P(300), 'It has', S(st.answer), P(300), 'Listen to both words:', st.pair[0], P(300), st.pair[1]],
   quiz: () => ['Hmm, not quite. Try again!'],
+};
+
+// ---------- short lines used around the app ----------
+export const LINES = {
+  sayItFast: 'Now say it fast!',
+  tapPicture: 'Now tap the picture!',
+  startsWith: 'starts with',
+  makes: 'makes',
+  has: 'has',
+  yes: 'Yes!',
+  no: 'No way!',
+  keptFlying: 'You kept it flying!',
+  nextPage: ['Next page!', 'Keep reading!', 'Read this page out loud.'],
+  readToGrownup: 'Now go find a grown-up, and read this story to them!',
+  passed: 'You did it!',
+  passedTired: 'Amazing work today! Time for a break?',
+  graduated: 'You can read books now, superstar!',
+  failed: "Good try! Let's practice this one again.",
+  sticker: 'You got a new sticker!',
+  testVoice: 'Hi! I am Hopper. Let’s learn to read together!',
+  testRate: 'The cat sat on the mat.',
 };
 
 export const PRAISE = ['Great job!', 'You got it!', 'Awesome!', 'Super!', 'Yes! Well done!', 'Wow!', 'Brilliant!', 'Hooray!', 'Way to go!', 'You are working so hard!'];

@@ -9,6 +9,7 @@ import { known, wordsAt, sentencesAt, questionsAt, analyze, BANK, firstLevel } f
 import { box, dueItems, item } from './store.js';
 import { shuffle, pick } from './ui.js';
 import { STORIES } from './content/stories.js';
+import { TIPS } from './narration.js';
 
 export const PASS = { new: 0.8, heart: 0.8, review: 0.8, check: 0.85, story: 0.66, ready: 0.7, warmup: 0 };
 
@@ -130,10 +131,10 @@ export function buildLevel(idx) {
   if (L.type === 'new') {
     const newKeys = L.teach.filter(k => !NO_QUIZ.has(k));
     L.teach.forEach(k => { if (!['e:_', 's:z', 'n:ng', 'ed:d', 'e:ee'].includes(k)) intro.push({ type: 'intro', key: k, idx }); });
-    if (L.teach.includes('e:ee')) intro.push({ type: 'tip', title: 'Open vowels', text: 'When a vowel is at the end of a short word, it says its name: he, me, we, go, no, hi!' });
-    if (L.teach.includes('n:ng')) intro.push({ type: 'tip', title: 'n before k', text: 'Before k, n says ng: sink, bank, pink.', sound: 'ng' });
-    if (L.teach.includes('s:z')) intro.push({ type: 'tip', title: 's can say z', text: 'At the end of some words, s buzzes like z: dogs, beds, pins.', sound: 'z' });
-    if (L.blends) intro.push({ type: 'tip', title: L.blends === 'start' ? 'Two letters in a row' : 'Two letters at the end', text: 'Say every sound, and keep your voice going: fff-rrr-ooo-g, frog!' });
+    if (L.teach.includes('e:ee')) intro.push({ type: 'tip', ...TIPS.open });
+    if (L.teach.includes('n:ng')) intro.push({ type: 'tip', ...TIPS.nk, sound: 'ng' });
+    if (L.teach.includes('s:z')) intro.push({ type: 'tip', ...TIPS.sz, sound: 'z' });
+    if (L.blends) intro.push({ type: 'tip', ...(L.blends === 'start' ? TIPS.blendStart : TIPS.blendEnd) });
     newKeys.forEach(k => practice.push(tapSound(k, idx), tapSound(k, idx)));
     if (newKeys.length === 1) practice.push(tapSound(newKeys[0], idx));
     reviewKeys(idx, canRead ? 2 : 3).forEach(k => practice.push(tapSound(k, idx)));

@@ -3,6 +3,7 @@
 // Whole words and instructions use the device's speech synthesis.
 import { SOUND } from './sounds.js';
 import { S } from './store.js';
+import { phraseHash } from './phrasekey.js';
 
 // ---------- IndexedDB ----------
 const DB = 'soundhop', STORE = 'rec';
@@ -109,7 +110,7 @@ function playBuf(buf, when = 0) {
 // Play one phoneme (by sound id). Falls back to speech synthesis if not recorded.
 export async function playSound(id, { cut = false } = {}) {
   const buf = await buffer(id);
-  if (!buf) return say(SOUND[id]?.tts ?? id, { rate: 0.7 });
+  if (!buf) return say(SOUND[id]?.tts ?? id, { rate: 0.7, device: true });
   const p = playBuf(buf);
   return new Promise(r => { p.src.onended = r; });
 }
@@ -171,9 +172,62 @@ function pickVoice() {
 }
 if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', () => { voice = pickVoice(); });
 
-export function say(text, { rate } = {}) {
+// ---------- Natural voice: pre-generated clips (see tools/gen-voice.mjs) ----------
+let clips = new Set();
+export async function loadClips() {
+  try { clips = new Set(await (await fetch('audio/n/manifest.json')).json()); } catch (e) { clips = new Set(); }
+  return clips.size;
+}
+export const clipCount = () => clips.size;
+export const naturalVoiceOn = () => clips.size > 0 && !S().settings.voice;
+export const clipUrl = (text) => { const h = phraseHash(text); return clips.has(h) ? `audio/n/${h}.mp3` : null; };
+const clipBufs = new Map();
+function clipBuffer(url) {
+  if (!clipBufs.has(url)) {
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then(b => ctxGet().decodeAudioData(b))
+      .catch(e => { clipBufs.delete(url); throw e; });
+    clipBufs.set(url, p);
+    if (clipBufs.size > 400) clipBufs.delete(clipBufs.keys().next().value);
+  }
+  return clipBufs.get(url);
+}
+// Start loading the clips a narration will need, so there are no gaps between them.
+export function warm(parts) {
+  if (!naturalVoiceOn()) return;
+  for (const p of parts) if (typeof p === 'string') { const u = clipUrl(p); if (u) clipBuffer(u).catch(() => { }); }
+}
+export async function downloadAllClips(onProgress) {
+  const cache = await caches.open('soundhop-voice');
+  const list = [...clips];
+  let n = 0;
+  for (let i = 0; i < list.length; i += 8) {
+    await Promise.all(list.slice(i, i + 8).map(async h => {
+      const url = `audio/n/${h}.mp3`;
+      if (!(await cache.match(url))) { try { const r = await fetch(url); if (r.ok) await cache.put(url, r); } catch (e) { } }
+      onProgress?.(++n, list.length);
+    }));
+  }
+}
+
+export function say(text, { rate, device } = {}) {
   text = (text ?? '').replace(/^[\s?.!,:]+/, '');  // never speak a lone '?'
-  if (!('speechSynthesis' in window) || !text) return Promise.resolve();
+  if (!text) return Promise.resolve();
+  const url = !device && naturalVoiceOn() ? clipUrl(text) : null;
+  if (!url && !device && naturalVoiceOn()) (window.__missedClips ??= new Set()).add(text); // coverage check in tests
+  if (url) {
+    const my = gen;
+    return clipBuffer(url).then(buf => {
+      if (gen !== my) return;
+      const p = playBuf(buf);
+      return new Promise(r => { p.src.onended = r; });
+    }).catch(() => deviceSay(text, rate));
+  }
+  return deviceSay(text, rate);
+}
+
+function deviceSay(text, rate) {
+  if (!('speechSynthesis' in window)) return Promise.resolve();
   return new Promise(res => {
     const u = new SpeechSynthesisUtterance(text);
     voice = voice ?? pickVoice();
@@ -197,6 +251,7 @@ const GAP = 350, AROUND_SOUND = 600;
 const wait = (ms) => new Promise(r => setTimeout(r, ms * (window.__timeScale ?? 1))); // __timeScale: automated tests only
 export async function speak(parts) {
   const my = gen;
+  warm(parts);
   let prev = null;
   for (const p of parts) {
     if (gen !== my) return;

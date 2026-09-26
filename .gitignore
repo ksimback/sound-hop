@@ -3,3 +3,6 @@ tasks/
 node_modules/
 .DS_Store
 .gstack/
+.env
+tools/.voice-mismatches.json
+tools/.voice-judged.json
