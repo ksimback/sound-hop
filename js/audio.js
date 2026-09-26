@@ -127,15 +127,49 @@ export async function playBlend(ids) {
 
 // ---------- Speech synthesis ----------
 let voice;
-export function voices() { return 'speechSynthesis' in window ? speechSynthesis.getVoices().filter(v => v.lang.startsWith('en')) : []; }
+// iOS novelty voices that are no good for teaching.
+const NOVELTY = /Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Fred|Good News|Jester|Junior|Kathy|Organ|Ralph|Superstar|Trinoids|Whisper|Wobble|Zarvox|Grandma|Grandpa|Eddy|Flo|Reed|Rocko|Sandy|Shelley/;
+// Downloaded iPhone voices carry "premium" or "enhanced" in their identifier.
+export function voiceQuality(v) {
+  const id = `${v.voiceURI} ${v.name}`;
+  return /premium/i.test(id) ? 2 : /enhanced|neural|natural/i.test(id) ? 1 : 0;
+}
+export function voiceLabel(v) {
+  const q = ['', ' · Enhanced', ' · Premium'][voiceQuality(v)];
+  return `${v.name.replace(/\s*\((Enhanced|Premium)\)/i, '')} (${v.lang})${q}`;
+}
+// English voices, best first: premium/enhanced, then US English.
+export function voices() {
+  if (!('speechSynthesis' in window)) return [];
+  return speechSynthesis.getVoices()
+    .filter(v => v.lang.replace('_', '-').startsWith('en') && !NOVELTY.test(v.name))
+    .sort((a, b) => voiceQuality(b) - voiceQuality(a) || (b.lang.includes('US') - a.lang.includes('US')) || a.name.localeCompare(b.name));
+}
+// iOS fills the voice list a moment after the page asks for it, so wait for it.
+export function loadVoices(timeout = 3000) {
+  return new Promise(res => {
+    if (!('speechSynthesis' in window)) return res([]);
+    const start = Date.now();
+    const check = () => {
+      const vs = voices();
+      if (vs.length || Date.now() - start > timeout) { speechSynthesis.removeEventListener?.('voiceschanged', check); clearInterval(t); res(vs); }
+    };
+    const t = setInterval(check, 200);
+    speechSynthesis.addEventListener?.('voiceschanged', check);
+    check();
+  });
+}
 function pickVoice() {
   const want = S().settings.voice;
   const vs = voices();
-  return vs.find(v => v.name === want)
-    ?? vs.find(v => /Samantha|Ava|Allison|Susan|Karen/.test(v.name) && v.lang === 'en-US')
-    ?? vs.find(v => v.lang === 'en-US') ?? vs[0];
+  const us = vs.filter(v => /US/.test(v.lang));
+  return vs.find(v => v.voiceURI === want || v.name === want)
+    ?? us.find(v => voiceQuality(v) > 0)
+    ?? vs.find(v => voiceQuality(v) > 0)
+    ?? us.find(v => /Samantha|Ava|Allison|Susan|Zoe|Karen/.test(v.name))
+    ?? us[0] ?? vs[0];
 }
-if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); };
+if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', () => { voice = pickVoice(); });
 
 export function say(text, { rate } = {}) {
   text = (text ?? '').replace(/^[\s?.!,:]+/, '');  // never speak a lone '?'
@@ -143,7 +177,7 @@ export function say(text, { rate } = {}) {
   return new Promise(res => {
     const u = new SpeechSynthesisUtterance(text);
     voice = voice ?? pickVoice();
-    if (voice) u.voice = voice;
+    try { if (voice) u.voice = voice; } catch (e) { voice = null; } // never let a bad voice block speech
     u.lang = 'en-US';
     u.rate = rate ?? S().settings.rate;
     let done = false;

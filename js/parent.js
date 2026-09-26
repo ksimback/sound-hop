@@ -4,7 +4,7 @@ import { S, save, reset, importJSON } from './store.js';
 import { SOUNDS, SOUND } from './sounds.js';
 import { LEVELS, NO_QUIZ, knownAt } from './curriculum.js';
 import { keyLabel, keySound } from './phonics.js';
-import { startRecording, stopRecording, setRec, getRec, delRec, hasRec, playSound, say, releaseMic, unlock, voices, resetVoice, loadRecordedList } from './audio.js';
+import { startRecording, stopRecording, setRec, getRec, delRec, hasRec, playSound, say, releaseMic, unlock, loadVoices, voiceLabel, voiceQuality, resetVoice, loadRecordedList } from './audio.js';
 
 // Sounds in the order the child meets them, so parents can record the first ones first.
 function soundOrder() {
@@ -109,15 +109,24 @@ const TABS = {
     const mins = h('select', { onchange: (e) => { s.settings.sessionMin = +e.target.value; save(); } }, [10, 15, 20, 30].map(m => h('option', { value: m, selected: s.settings.sessionMin === m }, `${m} minutes`)));
     const mic = h('input', { type: 'checkbox', checked: s.settings.micGame, onchange: (e) => { s.settings.micGame = e.target.checked; save(); } });
     const rate = h('input', { type: 'range', min: 0.5, max: 1.0, step: 0.05, value: s.settings.rate, onchange: (e) => { s.settings.rate = +e.target.value; save(); say('The cat sat on the mat.'); } });
-    const vs = voices();
-    const voice = h('select', { onchange: (e) => { s.settings.voice = e.target.value; save(); resetVoice(); say('Hello! Let’s read.'); } },
-      h('option', { value: '' }, 'Automatic'), vs.map(v => h('option', { value: v.name, selected: s.settings.voice === v.name }, `${v.name} (${v.lang})`)));
+    const voice = h('select', { onchange: (e) => { s.settings.voice = e.target.value; save(); resetVoice(); unlock(); say('Hello! Let\u2019s read a story.'); } },
+      h('option', { value: '' }, 'Loading voices…'));
+    const voiceInfo = h('p', { class: 'note' });
+    loadVoices().then(vs => {
+      const good = vs.filter(v => voiceQuality(v) > 0).length;
+      voice.replaceChildren(h('option', { value: '' }, 'Automatic (best available)'),
+        ...vs.map(v => h('option', { value: v.voiceURI, selected: s.settings.voice === v.voiceURI || s.settings.voice === v.name }, voiceLabel(v))));
+      voiceInfo.textContent = vs.length
+        ? `${vs.length} English voices found${good ? `, ${good} Enhanced/Premium (listed first)` : ', none Enhanced/Premium'}.`
+        : 'No voices were reported by this device.';
+    });
+    const testVoice = h('button', { class: 'pbtn alt', onclick: () => { unlock(); resetVoice(); say('Hi! I am Hopper. Let\u2019s learn to read together!'); } }, '▶ Test voice');
     const jump = h('select', {}, LEVELS.map((L, i) => h('option', { value: i, selected: i === s.levelIdx }, `${L.id}. ${L.title}`)));
     return h('div', {},
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Child’s name')), name),
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Suggested session length')), mins, h('p', { class: 'note' }, 'After this long, Hopper suggests a break (your child can keep going).')),
       h('div', { class: 'panel' }, h('label', { class: 'row' }, mic, h('b', {}, 'Voice blending game (uses microphone)')), h('p', { class: 'note' }, 'Mentava-style "keep your voice on" game: the bird flies while your child says the sounds without pausing.')),
-      h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Narrator voice')), voice, h('p', {}, 'Narrator speed (left = slower)'), rate, h('p', { class: 'note' }, 'Used for whole words and instructions. For a better voice on iPhone: Settings → Accessibility → Read & Speak (older iOS: Spoken Content) → Voices → English → pick a voice such as Ava or Zoe → download the Enhanced or Premium version. Then pick it here. If it does not appear here, iOS is not sharing it with web apps, and the app uses the best available voice.')),
+      h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Narrator voice')), voice, voiceInfo, testVoice, h('p', {}, 'Narrator speed (left = slower)'), rate, h('p', { class: 'note' }, 'Used for whole words and instructions. For a better voice on iPhone: Settings → Accessibility → Read & Speak (older iOS: Spoken Content) → Voices → English → pick a voice such as Ava or Zoe → download the Enhanced or Premium version. Then pick it here. If it does not appear here, iOS is not sharing it with web apps, and the app uses the best available voice.')),
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Move to a level')), jump,
         h('div', { class: 'row', style: { marginTop: '10px' } }, h('button', { class: 'pbtn', onclick: () => { s.levelIdx = +jump.value; save(); alert('Moved to level ' + (+jump.value + 1)); } }, 'Set current level')),
         h('p', { class: 'note' }, 'Use this if your child already knows early material. Earlier levels stay replayable from the map.')));

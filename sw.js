@@ -1,5 +1,5 @@
 // Offline support: precache the app; serve from network when online, cache when offline.
-const VERSION = 'soundhop-v2';
+const VERSION = 'soundhop-v3';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'fonts/andika-400.woff2', 'fonts/andika-700.woff2',
