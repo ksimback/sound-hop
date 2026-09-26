@@ -12,7 +12,7 @@ A phonics PWA that takes a young child from letter sounds to reading early books
 ## Structure
 - `js/sounds.js`: the 44 sounds, with pronunciation notes and example words
 - `js/phonics.js`: word → grapheme/sound tokens
-- `js/curriculum.js`: the 82-level path across 4 stages
+- `js/curriculum.js`: the 93-level path across 4 stages
 - `js/content/`: word bank, sentences, yes/no questions, stories
 - `js/engine.js`: builds each level's activity sequence
 - `js/activities.js`, `js/app.js`, `js/parent.js`: the UI
