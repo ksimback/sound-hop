@@ -133,6 +133,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .tile.correct { background: #d8f8df; box-shadow: 0 8px 0 var(--good); animation: pop .35s; }
 .tile.wrong { background: #ffe0e0; animation: shake .4s; }
 .tile.dim { opacity: .35; }
+.waiting { opacity: .45; pointer-events: none; transition: opacity .3s; }
 .tile.hint { outline: 5px dashed var(--good); outline-offset: 4px; }
 @keyframes pop { 50% { transform: scale(1.08) } }
 @keyframes shake { 20%, 60% { transform: translateX(-10px) } 40%, 80% { transform: translateX(10px) } }

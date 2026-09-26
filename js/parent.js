@@ -108,7 +108,7 @@ const TABS = {
     const name = h('input', { type: 'text', value: s.child.name, onchange: (e) => { s.child.name = e.target.value.trim(); save(); } });
     const mins = h('select', { onchange: (e) => { s.settings.sessionMin = +e.target.value; save(); } }, [10, 15, 20, 30].map(m => h('option', { value: m, selected: s.settings.sessionMin === m }, `${m} minutes`)));
     const mic = h('input', { type: 'checkbox', checked: s.settings.micGame, onchange: (e) => { s.settings.micGame = e.target.checked; save(); } });
-    const rate = h('input', { type: 'range', min: 0.6, max: 1.1, step: 0.05, value: s.settings.rate, onchange: (e) => { s.settings.rate = +e.target.value; save(); say('The cat sat on the mat.'); } });
+    const rate = h('input', { type: 'range', min: 0.5, max: 1.0, step: 0.05, value: s.settings.rate, onchange: (e) => { s.settings.rate = +e.target.value; save(); say('The cat sat on the mat.'); } });
     const vs = voices();
     const voice = h('select', { onchange: (e) => { s.settings.voice = e.target.value; save(); resetVoice(); say('Hello! Let’s read.'); } },
       h('option', { value: '' }, 'Automatic'), vs.map(v => h('option', { value: v.name, selected: s.settings.voice === v.name }, `${v.name} (${v.lang})`)));
@@ -117,7 +117,7 @@ const TABS = {
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Child’s name')), name),
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Suggested session length')), mins, h('p', { class: 'note' }, 'After this long, Hopper suggests a break (your child can keep going).')),
       h('div', { class: 'panel' }, h('label', { class: 'row' }, mic, h('b', {}, 'Voice blending game (uses microphone)')), h('p', { class: 'note' }, 'Mentava-style "keep your voice on" game: the bird flies while your child says the sounds without pausing.')),
-      h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Word voice')), voice, h('p', {}, 'Speed'), rate, h('p', { class: 'note' }, 'Used for whole words and instructions. For a better voice on iPhone: Settings → Accessibility → Spoken Content → Voices → English → download an "Enhanced" voice (e.g. Ava or Samantha), then pick it here.')),
+      h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Narrator voice')), voice, h('p', {}, 'Narrator speed (left = slower)'), rate, h('p', { class: 'note' }, 'Used for whole words and instructions. For a better voice on iPhone: Settings → Accessibility → Read & Speak (older iOS: Spoken Content) → Voices → English → pick a voice such as Ava or Zoe → download the Enhanced or Premium version. Then pick it here. If it does not appear here, iOS is not sharing it with web apps, and the app uses the best available voice.')),
       h('div', { class: 'panel' }, h('p', {}, h('b', {}, 'Move to a level')), jump,
         h('div', { class: 'row', style: { marginTop: '10px' } }, h('button', { class: 'pbtn', onclick: () => { s.levelIdx = +jump.value; save(); alert('Moved to level ' + (+jump.value + 1)); } }, 'Set current level')),
         h('p', { class: 'note' }, 'Use this if your child already knows early material. Earlier levels stay replayable from the map.')));

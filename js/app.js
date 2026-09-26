@@ -84,8 +84,8 @@ async function startSession() {
   const idx = Math.min(s.levelIdx, LEVELS.length - 1);
   if (s.levelIdx >= LEVELS.length) return go('map');
   const warm = buildWarmup(idx);
-  if (warm.length >= 3) {
-    const r = await run(warm, { idx, title: 'Warm-up', intro: 'Warm-up time! Remember these?' });
+  if (warm.length >= 4) {
+    const r = await run(warm, { idx, title: 'Warm-up' });
     if (!r) return go('home');
   }
   playLevel(idx);
@@ -93,7 +93,7 @@ async function startSession() {
 
 async function playLevel(idx) {
   const plan = buildLevel(idx);
-  const r = await run(plan.steps, { idx, title: plan.level.title, intro: plan.level.type === 'check' ? 'Big check! Show what you know!' : null });
+  const r = await run(plan.steps, { idx, title: plan.level.title });
   if (!r) return go('home');
   const acc = r.scored ? r.right / r.scored : 1;
   const passed = acc >= plan.pass;
@@ -133,15 +133,25 @@ function results(level, { passed, stars, sticker }) {
 }
 
 // Runs a list of steps. Wrong first tries are retested a few steps later (not re-scored).
-async function run(steps, { idx, title, intro }) {
+async function run(steps, { idx, title }) {
   const queue = steps.map(s => ({ ...s, idx }));
+  // Full spoken instructions the first time each activity appears in a lesson,
+  // for the child's first 8 lessons with that activity; shorter prompts after that.
+  const seen = S().explained ?? (S().explained = {});
+  const explained = new Set();
+  for (const s of queue) {
+    if (s.type === 'lessonIntro' || explained.has(s.type)) continue;
+    explained.add(s.type);
+    s.first = (seen[s.type] ?? 0) < 8;
+    seen[s.type] = (seen[s.type] ?? 0) + 1;
+  }
+  save();
   let scored = 0, right = 0, bonus = false, quit = false;
   const bar = h('i');
   const stage = h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column' } });
   const quitBtn = h('button', { class: 'icon-btn', 'aria-label': 'Stop', onclick: () => { quit = true; stopAll(); go('home'); } }, '✖');
   app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'topbar' }, quitBtn, h('div', { class: 'progress' }, bar)), stage));
-  if (intro) { await say(intro); }
-  const total = queue.length;
+  const total = queue.filter(s => s.type !== 'lessonIntro').length;
   let doneCount = 0;
   while (queue.length) {
     if (quit) return null;
@@ -156,9 +166,9 @@ async function run(steps, { idx, title, intro }) {
       scored++;
       if (res.correct) right++;
       if (st.item) grade(st.item, res.correct);
-      if (!res.correct) queue.splice(Math.min(3, queue.length), 0, { ...st, retry: true });
+      if (!res.correct) queue.splice(Math.min(3, queue.length), 0, { ...st, retry: true, first: false });
     }
-    if (!st.retry) doneCount++;
+    if (!st.retry && st.type !== 'lessonIntro') doneCount++;
     bar.style.width = Math.round((doneCount / total) * 100) + '%';
   }
   return { scored, right, bonus };

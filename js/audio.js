@@ -88,7 +88,9 @@ function trim(buf) {
 function rms(d, s, n) { let x = 0; for (let i = s; i < s + n; i++) x += d[i] * d[i]; return Math.sqrt(x / n); }
 
 let current = [];
+let gen = 0; // bumped by stopAll so an in-progress narration stops cleanly
 export function stopAll() {
+  gen++;
   current.forEach(s => { try { s.stop(); } catch (e) { } });
   current = [];
   if ('speechSynthesis' in window) speechSynthesis.cancel();
@@ -136,6 +138,7 @@ function pickVoice() {
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); };
 
 export function say(text, { rate } = {}) {
+  text = (text ?? '').replace(/^[\s?.!,:]+/, '');  // never speak a lone '?'
   if (!('speechSynthesis' in window) || !text) return Promise.resolve();
   return new Promise(res => {
     const u = new SpeechSynthesisUtterance(text);
@@ -153,14 +156,26 @@ export function say(text, { rate } = {}) {
 }
 export function resetVoice() { voice = null; }
 
-// A prompt mixing speech and recorded sounds: ['Tap', {sound:'m'}, '!']
-export async function speak(parts, token) {
+// Narration mixing speech and recorded sounds: ['Listen:', {sound:'m'}, 'Tap it!'].
+// Built-in pacing for young children: a short breath between phrases and a longer
+// pause on both sides of every recorded sound so it stands out from the voice.
+const GAP = 350, AROUND_SOUND = 600;
+const wait = (ms) => new Promise(r => setTimeout(r, ms * (window.__timeScale ?? 1))); // __timeScale: automated tests only
+export async function speak(parts) {
+  const my = gen;
+  let prev = null;
   for (const p of parts) {
-    if (token && token.cancelled) return;
+    if (gen !== my) return;
+    const isSound = typeof p === 'object' && (p.sound || p.blend);
+    if (prev && !(typeof p === 'object' && p.pause) && !(typeof prev === 'object' && prev.pause)) {
+      await wait(isSound || (typeof prev === 'object' && (prev.sound || prev.blend)) ? AROUND_SOUND : GAP);
+      if (gen !== my) return;
+    }
     if (typeof p === 'string') await say(p);
-    else if (p.sound) await playSound(p.sound);
+    else if (p.sound) { p.onStart?.(); await playSound(p.sound); }
     else if (p.blend) await playBlend(p.blend);
-    else if (p.pause) await new Promise(r => setTimeout(r, p.pause));
+    else if (p.pause) await wait(p.pause);
+    prev = p;
   }
 }
 

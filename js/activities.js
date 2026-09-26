@@ -1,11 +1,12 @@
 // Each activity renders into `root` and resolves { scored, correct } when finished.
 // Wrong answers get immediate correction (show + say the right answer) — the runner re-tests later.
-import { h, wordEl, slider, soundOut, shuffle, pick, sleep, flash, PRAISE, TRY, confetti } from './ui.js';
+import { h, wordEl, slider, soundOut, shuffle, pick, sleep, flash, confetti } from './ui.js';
+import { PROMPTS, WRONG, PRAISE, introScript, heartIntroScript, lessonOpening } from './narration.js';
 import { speak, say, playSound, playBlend, stopAll, ctxGet, micLevel, releaseMic } from './audio.js';
 import { keyLabel, keySound } from './phonics.js';
 import { SOUND } from './sounds.js';
 import { analyze, isHeartAt } from './lexicon.js';
-import { LEVELS } from './curriculum.js';
+import { LEVELS, NO_QUIZ, READY_LEVEL } from './curriculum.js';
 import { introWords } from './engine.js';
 import { S } from './store.js';
 
@@ -37,13 +38,23 @@ export function displayText(text, idx) {
   return text.split(' ').map(w => (w.replace(/[^A-Za-z]/g, '') === 'I' ? w : w.toLowerCase())).join(' ');
 }
 
-function promptRow(parts, token) {
-  const btn = h('button', { class: 'say-btn', 'aria-label': 'Hear again', onclick: () => { stopAll(); speak(parts, token); } }, '🔊');
+function promptRow(parts) {
+  const btn = h('button', { class: 'say-btn', 'aria-label': 'Hear again', onclick: () => { stopAll(); speak(parts); } }, '🔊');
   return h('div', { class: 'prompt' }, btn);
 }
 
+// Speak an activity's prompt. The first time an activity type appears in a lesson the
+// child hears the full explanation, and the answers wait until it is finished.
+function ask(type, st, extra) {
+  const full = PROMPTS[type](st, !!st.first, extra);
+  const short = st.first ? PROMPTS[type](st, false, extra) : full;
+  const done = speak(full);
+  return { row: promptRow(short), ready: st.first ? done : null };
+}
+
 // Generic multiple choice. tiles: [{el, correct, value}]
-function choose(grid, tiles, { onRight, onWrong } = {}) {
+function choose(grid, tiles, { onRight, onWrong, ready } = {}) {
+  if (ready) { grid.classList.add('waiting'); ready.then(() => grid.classList.remove('waiting')); }
   return new Promise(res => {
     let first = true, locked = false;
     tiles.forEach(t => {
@@ -56,7 +67,7 @@ function choose(grid, tiles, { onRight, onWrong } = {}) {
           t.el.classList.add('correct');
           tiles.forEach(o => o !== t && o.el.classList.add('dim'));
           await onRight?.(first);
-          if (first && Math.random() < 0.5) await say(pick(PRAISE));
+          if (first && Math.random() < 0.6) await say(pick(PRAISE));
           await sleep(350);
           res({ scored: true, correct: first });
         } else {
@@ -94,7 +105,6 @@ const A = {};
 A.intro = async (root, st) => {
   const s = keySound(st.key), sound = SOUND[s];
   const label = keyLabel(st.key);
-  const team = label.replace('_', '').length > 1;
   const card = h('div', { class: 'glyph-card', onclick: () => { stopAll(); playSound(s); flash(card); } }, h('div', { class: 'glyph' }, label.replace('_', ' _ ')));
   const words = introWords(st.key);
   const wordRow = h('div', { class: 'choices one-row', style: { width: 'min(96vw, 680px)' } }, words.map(w =>
@@ -102,12 +112,10 @@ A.intro = async (root, st) => {
       h('div', {}, w.pic, h('div', { style: { fontSize: '22px' } }, w.word)))));
   const next = nextBtn();
   next.disabled = true;
-  const parts = team
-    ? [label.includes('_') ? 'Magic e makes this vowel say' : 'These letters are a team. Together they say', { sound: s }, { pause: 300 }, 'Say it with me!', { sound: s }]
-    : ['This letter says', { sound: s }, { pause: 300 }, 'Say it with me!', { sound: s }];
+  const parts = introScript(st.key, words);
   screenBody(root, h('div', { class: 'mascot small' }, '🐸'), card, promptRow(parts), wordRow, next);
+  flash(card, 1500);
   await speak(parts);
-  for (const w of words.slice(0, 3)) { await sleep(150); await say(w.word, { rate: 0.75 }); }
   next.disabled = false;
   await next.done;
   return { scored: false };
@@ -116,7 +124,7 @@ A.intro = async (root, st) => {
 A.tip = async (root, st) => {
   const next = nextBtn('OK! ➜');
   screenBody(root, h('div', { class: 'mascot small' }, '🐸'), h('div', { class: 'bubble' }, h('div', { style: { fontSize: '28px' } }, st.title), h('p', { style: { fontWeight: 600 } }, st.text)), next);
-  await speak([st.title, st.text, ...(st.sound ? [{ sound: st.sound }] : [])]);
+  await speak([st.title, st.text, ...(st.sound ? [{ sound: st.sound }] : []), 'Tap OK when you are ready.']);
   await next.done;
   return { scored: false };
 };
@@ -126,61 +134,62 @@ A.heartIntro = async (root, st) => {
   const w = wordEl(a, { heart: true, tap: false });
   const card = h('div', { class: 'glyph-card', onclick: () => say(st.word) }, w);
   const next = nextBtn();
-  const parts = ['This is a heart word. We learn it by heart.', { pause: 200 }, 'It says', st.word, { pause: 300 }, 'Say it with me:', st.word];
+  const parts = heartIntroScript(st.word);
+  next.disabled = true;
   screenBody(root, h('div', { style: { fontSize: '64px' } }, '❤️'), card, promptRow(parts), next);
   await speak(parts);
+  next.disabled = false;
   await next.done;
   return { scored: false };
 };
 
 A.tapSound = async (root, st) => {
   const s = keySound(st.key);
-  const parts = ['Tap', { sound: s }];
   const grid = h('div', { class: 'choices' + (st.choices.length === 3 ? ' three' : '') });
-  screenBody(root, h('div', { class: 'mascot small' }, '👂'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('tapSound', st);
+  screenBody(root, h('div', { class: 'mascot small' }, '👂'), row, grid);
   return choose(grid, st.choices.map(k => ({ el: h('button', { class: 'tile' }, keyLabel(k).replace('_', ' _ ')), correct: keyLabel(k) === keyLabel(st.key) })), {
+    ready,
     onRight: () => playSound(s),
-    onWrong: () => speak([pick(TRY), 'This one says', { sound: s }]),
+    onWrong: () => speak(WRONG.tapSound(st)),
   });
 };
 
 A.firstSound = async (root, st) => {
   const s = keySound(st.key);
-  const parts = [st.word, { pause: 150 }, 'What sound does', st.word, 'start with?'];
   const grid = h('div', { class: 'choices three' });
-  screenBody(root, h('div', { class: 'story-pic', onclick: () => say(st.word) }, st.pic), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('firstSound', st);
+  screenBody(root, h('div', { class: 'story-pic', onclick: () => say(st.word) }, st.pic), row, grid);
   return choose(grid, st.choices.map(k => ({ el: h('button', { class: 'tile' }, keyLabel(k)), correct: keyLabel(k) === keyLabel(st.key) })), {
-    onRight: () => speak([{ sound: s }, { pause: 100 }, st.word]),
-    onWrong: () => speak([st.word, 'starts with', { sound: s }]),
+    ready,
+    onRight: () => speak([st.word, 'starts with', { sound: s }]),
+    onWrong: () => speak(WRONG.firstSound(st)),
   });
 };
 
 A.oralBlend = async (root, st) => {
   const sounds = st.entry.toks.filter(t => t.s !== '_').map(t => t.s);
-  const parts = ['Listen, and put the sounds together!', { pause: 200 }, { blend: sounds }, { pause: 300 }, 'What is it?'];
   const grid = h('div', { class: 'choices three' });
-  screenBody(root, h('div', { class: 'mascot small' }, '🐸'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('oralBlend', st);
+  screenBody(root, h('div', { class: 'mascot small' }, '🐸'), row, grid);
   return choose(grid, st.choices.map(e => ({ el: h('button', { class: 'tile pic' }, e.pic), correct: e === st.entry })), {
-    onRight: () => speak([{ blend: sounds }, st.entry.word]),
-    onWrong: () => speak([{ blend: sounds }, { pause: 150 }, st.entry.word]),
+    ready,
+    onRight: () => speak([{ blend: sounds }, 'makes', st.entry.word]),
+    onWrong: () => speak(WRONG.oralBlend(st)),
   });
 };
 
 A.dir = async (root, st) => {
   const flip = Math.random() < 0.5;
   const target = flip ? `${st.wb} ${st.wa}` : `${st.wa} ${st.wb}`;
-  const parts = ['We read left to right.', 'Which one says:', target.replace(' ', ''), '?'];
   const grid = h('div', { class: 'choices' });
-  screenBody(root, h('div', { class: 'mascot small' }, '🐸➡️'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('dir', st, target.replace(' ', ''));
+  screenBody(root, h('div', { class: 'mascot small' }, '🐸➡️'), row, grid);
   const mk = (x, y) => h('button', { class: 'tile pic', style: { fontSize: '60px' } }, h('div', {}, x + y, h('div', { style: { fontSize: '26px', color: '#8fa0ae' } }, '➜')));
   return choose(grid, shuffle([
     { el: mk(st.a, st.b), correct: !flip },
     { el: mk(st.b, st.a), correct: flip },
-  ]), { onWrong: () => speak(['Hop from left to right:', target]) });
+  ]), { ready, onWrong: () => speak(['Not quite. Hop from left to right:', target, 'Tap it!']) });
 };
 
 function readingPanel(entry, idx, { knob = '🐸', silent = false, onDone } = {}) {
@@ -192,40 +201,39 @@ function readingPanel(entry, idx, { knob = '🐸', silent = false, onDone } = {}
 
 A.readWord = async (root, st) => {
   const { w, sl, a } = readingPanel(st.entry, st.idx, { onDone: () => say('Now say it fast!') });
-  const parts = ['Read the word. Find the picture!'];
   const grid = h('div', { class: 'choices three' });
-  screenBody(root, w, sl, promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('readWord', st);
+  screenBody(root, w, sl, row, grid);
   return choose(grid, st.choices.map(e => ({ el: h('button', { class: 'tile pic' }, e.pic), correct: e === st.entry })), {
+    ready,
     onRight: () => soundOut(a, w.spans),
-    onWrong: () => soundOut(a, w.spans),
+    onWrong: async () => { await say("Not quite. Let's sound it out together."); await soundOut(a, w.spans); await say('Now tap the picture!'); },
   });
 };
 
 A.pickWord = async (root, st) => {
-  const parts = ['Find the word:', st.entry.word];
   const grid = h('div', { class: 'choices one-row', style: { gridTemplateColumns: '1fr' } });
   const top = st.entry.pic ? h('div', { class: 'story-pic', onclick: () => say(st.entry.word) }, st.entry.pic) : h('div', { class: 'mascot small' }, '👂');
-  screenBody(root, top, promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('pickWord', st);
+  screenBody(root, top, row, grid);
   return choose(grid, st.choices.map(e => {
     const we = wordEl({ word: e.word, toks: e.toks }, { size: 'sm', tap: false, heart: isHeartAt(e.word, st.idx) });
     return { el: h('button', { class: 'tile wordtile', style: { minHeight: '96px' } }, we), correct: e === st.entry };
   }), {
+    ready,
     onRight: () => say(st.entry.word),
-    onWrong: () => speak(['This one says', st.entry.word]),
+    onWrong: () => speak(WRONG.pickWord(st)),
   });
 };
 
 A.heartPick = async (root, st) => {
-  const parts = ['Find the word:', st.word];
   const grid = h('div', { class: 'choices one-row', style: { gridTemplateColumns: '1fr' } });
-  screenBody(root, h('div', { style: { fontSize: '56px' } }, '❤️'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('heartPick', st);
+  screenBody(root, h('div', { style: { fontSize: '56px' } }, '❤️'), row, grid);
   return choose(grid, st.choices.map(w => {
     const we = wordEl(analyze(w), { size: 'sm', tap: false, heart: isHeartAt(w, st.idx) });
     return { el: h('button', { class: 'tile wordtile', style: { minHeight: '96px' } }, we), correct: w === st.word };
-  }), { onRight: () => say(st.word), onWrong: () => speak(['This one says', st.word]) });
+  }), { ready, onRight: () => say(st.word), onWrong: () => speak(WRONG.heartPick(st)) });
 };
 
 function sentenceEl(text, idx) {
@@ -244,39 +252,39 @@ function sentenceEl(text, idx) {
 }
 
 A.sentence = async (root, st) => {
-  const parts = ['Read the sentence. Which picture matches?'];
   const grid = h('div', { class: 'choices three' });
-  screenBody(root, sentenceEl(st.s.text, st.idx), h('div', { class: 'slide-hint' }, 'tap a word for help'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('sentence', st);
+  screenBody(root, sentenceEl(st.s.text, st.idx), h('div', { class: 'slide-hint' }, 'tap a word for help'), row, grid);
   return choose(grid, st.choices.map(p => ({ el: h('button', { class: 'tile pic', style: { fontSize: '52px' } }, p), correct: p === st.s.pic })), {
+    ready,
     onRight: () => say(st.s.text),
-    onWrong: () => say(st.s.text),
+    onWrong: () => speak(WRONG.sentence(st)),
   });
 };
 
 A.yesno = async (root, st) => {
-  const parts = ['Read it. Yes or no?'];
   const grid = h('div', { class: 'yn' });
-  screenBody(root, h('div', { class: 'story-pic', style: { fontSize: '90px' } }, st.q.pic ?? '🤔'), sentenceEl(st.q.text, st.idx), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('yesno', st);
+  screenBody(root, h('div', { class: 'story-pic', style: { fontSize: '90px' } }, st.q.pic ?? '🤔'), sentenceEl(st.q.text, st.idx), row, grid);
   return choose(grid, [
     { el: h('button', { class: 'tile' }, '👍'), correct: st.q.yes },
     { el: h('button', { class: 'tile' }, '👎'), correct: !st.q.yes },
   ], {
+    ready,
     onRight: () => speak([st.q.text, st.q.yes ? 'Yes!' : 'No way!']),
-    onWrong: () => speak([st.q.text, st.q.yes ? 'Yes, it can!' : 'No!']),
+    onWrong: () => speak(WRONG.yesno(st)),
   });
 };
 
 A.compare = async (root, st) => {
   const lab = (s) => (s === 'k' ? 'c' : SOUND[s]?.show ?? s);
-  const parts = ['Listen:', st.word, { pause: 250 }, 'Do you hear', { sound: st.a }, 'or', { sound: st.b }, '?'];
   const grid = h('div', { class: 'choices' });
-  screenBody(root, h('div', { class: 'mascot small' }, '👂'), promptRow(parts), grid);
-  speak(parts);
+  const { row, ready } = ask('compare', st);
+  screenBody(root, h('div', { class: 'mascot small' }, '👂'), row, grid);
   return choose(grid, [st.a, st.b].map(s => ({ el: h('button', { class: 'tile' }, lab(s)), correct: s === st.answer })), {
+    ready,
     onRight: () => speak([st.word, 'has', { sound: st.answer }]),
-    onWrong: () => speak([st.word, { pause: 150 }, 'has', { sound: st.answer }, { pause: 200 }, 'Listen:', st.pair[0], st.pair[1]]),
+    onWrong: () => speak(WRONG.compare(st)),
   });
 };
 
@@ -297,7 +305,7 @@ A.voice = async (root, st) => {
   let resolve; const done = new Promise(r => (resolve = r));
   skip.onclick = () => { cleanup(); resolve({ scored: false }); };
   screenBody(root, w, sky, sl, status, skip);
-  await speak(['Slide and say each sound.', 'Keep your voice on, so the bird keeps flying!']);
+  await speak(PROMPTS.voice(st, !!st.first));
   try { mic = await micLevel(); } catch (e) { status.textContent = 'Microphone not available'; await sleep(800); cleanup(); return { scored: false }; }
   sl.addEventListener('pointerdown', () => { started = true; failed = false; quietSince = 0; bird.classList.remove('fall'); });
   const loop = () => {
@@ -339,23 +347,43 @@ A.page = async (root, st) => {
   const read = h('button', { class: 'btn ghost small', onclick: () => { stopAll(); say(st.page.text); } }, '🔊 Read it to me');
   const head = h('div', { class: 'page-count' }, `${st.title} · ${st.i + 1} / ${st.n}`);
   screenBody(root, head, h('div', { class: 'story-pic' }, st.page.pic), sentenceEl(st.page.text, st.idx), h('div', { class: 'slide-hint' }, 'read it out loud · tap a word for help'), h('div', { class: 'row' }, read), next);
-  if (st.i === 0) say('Read the story out loud!');
+  if (st.i > 0) say(pick(['Next page!', 'Keep reading!', 'Read this page out loud.']));
   await next.done;
   return { scored: false };
 };
 
 A.quiz = async (root, st) => {
-  const parts = [st.q.q];
   const grid = h('div', { class: 'choices three' });
-  screenBody(root, h('div', { class: 'mascot small' }, '🤔'), h('div', { class: 'bubble' }, st.q.q), promptRow(parts), grid);
-  speak(parts);
-  return choose(grid, st.q.options.map((o, i) => ({ el: h('button', { class: 'tile pic' }, o), correct: i === st.q.answer })));
+  const { row, ready } = ask('quiz', st);
+  screenBody(root, h('div', { class: 'mascot small' }, '🤔'), h('div', { class: 'bubble' }, st.q.q), row, grid);
+  return choose(grid, st.q.options.map((o, i) => ({ el: h('button', { class: 'tile pic' }, o), correct: i === st.q.answer })), { ready, onWrong: () => speak(WRONG.quiz(st)) });
 };
 
 A.readAloud = async (root, st) => {
   const next = nextBtn('We did it! 🎉');
   screenBody(root, h('div', { class: 'mascot' }, '📖'), h('div', { class: 'bubble' }, `Now read "${st.title}" to a grown-up!`), next);
   await say(`Now go find a grown-up, and read ${st.title} to them!`);
+  await next.done;
+  return { scored: false };
+};
+
+// Spoken lesson opening: what we're doing today, and the new sounds we'll meet.
+// Each new letter card lights up as its sound plays.
+A.lessonIntro = async (root, st) => {
+  const newKeys = (st.level.teach ?? []).filter(k => !NO_QUIZ.has(k));
+  const parts = lessonOpening(st.level, newKeys, S().child.name || 'friend', S().log.length > 0, st.idx > READY_LEVEL);
+  const cards = newKeys.map(k => h('div', { class: 'glyph-card', style: { minWidth: '100px', padding: '4px 20px 12px' } },
+    h('div', { class: 'glyph', style: { fontSize: '84px' } }, keyLabel(k).replace('_', ' _ '))));
+  const next = nextBtn("Let's go! ➜");
+  next.disabled = !S().levels[st.level.id]?.passed;
+  screenBody(root, h('div', { class: 'mascot' }, '🐸'),
+    h('div', { class: 'bubble' }, st.level.type === 'warmup' ? 'Warm-up' : st.level.title),
+    cards.length ? h('div', { class: 'row', style: { justifyContent: 'center', gap: '14px' } }, cards) : null,
+    promptRow(parts), next);
+  let c = 0;
+  const cued = parts.map(p => (p && p.sound && cards[c] ? { ...p, onStart: ((el) => () => flash(el, 1600))(cards[c++]) } : p));
+  await speak(cued);
+  next.disabled = false;
   await next.done;
   return { scored: false };
 };

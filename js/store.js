@@ -17,7 +17,7 @@ function fresh() {
     sessions: 0,
     minutes: 0,
     log: [],              // { t, level, acc, passed }
-    settings: { sessionMin: 15, micGame: true, rate: 0.85, voice: '' },
+    settings: { sessionMin: 15, micGame: true, rate: 0.75, voice: '' },
     onboarded: false,
   };
 }
@@ -27,7 +27,11 @@ let state = load();
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...fresh(), ...JSON.parse(raw), settings: { ...fresh().settings, ...JSON.parse(raw).settings } };
+    if (raw) {
+      const st = { ...fresh(), ...JSON.parse(raw), settings: { ...fresh().settings, ...JSON.parse(raw).settings } };
+      if (st.settings.rate === 0.85) st.settings.rate = 0.75; // old default was too fast
+      return st;
+    }
   } catch (e) { /* fall through */ }
   return fresh();
 }

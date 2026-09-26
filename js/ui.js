@@ -19,7 +19,7 @@ export function h(tag, attrs = {}, ...kids) {
 
 export const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 export const pick = (a) => a[Math.floor(Math.random() * a.length)];
-export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+export const sleep = (ms) => new Promise(r => setTimeout(r, ms * (window.__timeScale ?? 1)));
 
 // Color scaffolding: new letter teams are pink and silent letters grey; both fade to
 // normal ink as the child masters that grapheme (Mentava's "training wheels").
@@ -55,6 +55,7 @@ export async function soundOut(analysis, spans) {
   const toks = analysis.toks.filter(t => t.s !== '_');
   spans?.forEach((s, i) => analysis.toks[i].s !== '_' && setTimeout(() => flash(s, 500), i * 350));
   await playBlend(toks.map(t => t.s));
+  await sleep(500);
   await say(analysis.word);
 }
 

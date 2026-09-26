@@ -154,7 +154,6 @@ export function buildLevel(idx) {
   }
 
   if (L.type === 'ready') {
-    intro.push({ type: 'tip', title: 'Left to right', text: 'We read from left to right, like a frog hopping along!' });
     [['🐶', '🐟', 'dog', 'fish'], ['🚗', '✈️', 'car', 'plane'], ['🐱', '🎩', 'cat', 'hat'], ['☀️', '🌸', 'sun', 'flower']].forEach(([a, b, wa, wb]) => practice.push({ type: 'dir', a, b, wa, wb }));
     for (let i = 0; i < 4; i++) practice.push(oralBlend(idx));
     reviewKeys(idx, 3).forEach(k => practice.push(tapSound(k, idx)));
@@ -186,13 +185,13 @@ export function buildLevel(idx) {
     st.pages.forEach((p, i) => intro.push({ type: 'page', page: p, i, n: st.pages.length, title: st.title, idx }));
     st.quiz.forEach(q => practice.push({ type: 'quiz', q }));
     practice.push({ type: 'readAloud', title: st.title });
-    return { level: L, steps: compact([...intro, ...practice]), pass: PASS.story };
+    return { level: L, steps: compact([{ type: 'lessonIntro', level: L }, ...intro, ...practice]), pass: PASS.story };
   }
 
   // Keep early sound-only levels short; interleave practice.
   let steps = compact(practice);
   if (L.type !== 'ready') steps = interleave(steps);
-  return { level: L, steps: [...compact(intro), ...steps], pass: PASS[L.type] };
+  return { level: L, steps: [{ type: 'lessonIntro', level: L }, ...compact(intro), ...steps], pass: PASS[L.type] };
 }
 
 // Spread items so the same kind doesn't repeat back to back; end on reading.
@@ -218,7 +217,8 @@ export function buildWarmup(idx) {
     dueItems('w:', 3).map(id => BANK.get(id.slice(2))).filter(Boolean).forEach(e => steps.push(e.pic ? readWord(e, idx) : pickWord(e, idx)));
     dueItems('h:', 2).map(id => id.slice(2)).filter(w => known(idx).hearts.has(w)).forEach(w => steps.push(heartPick(w, idx)));
   }
-  return compact(steps).slice(0, 6);
+  const out = compact(steps).slice(0, 6);
+  return out.length ? [{ type: 'lessonIntro', level: { type: 'warmup', title: 'Warm-up', teach: [] } }, ...out] : [];
 }
 
 export function introWords(key) {
