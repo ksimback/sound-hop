@@ -1,7 +1,7 @@
 // Small DOM helpers, the word renderer (with Mentava-style color scaffolding) and the finger slider.
 import { box } from './store.js';
 import { knowKey } from './phonics.js';
-import { playSound, playBlend, say, stopAll } from './audio.js';
+import { playSound, say, stopAll, speechGen } from './audio.js';
 
 export function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -50,12 +50,21 @@ export function wordEl(analysis, opts = {}) {
 
 export function flash(el, ms = 600) { el.classList.add('lit'); setTimeout(() => el.classList.remove('lit'), ms); }
 
+// Model sounding out: each sound on its own with its letter lit ("h… a… t…"), then the
+// real word in the natural voice. Sounds are not stitched together; that sounded unnatural.
 export async function soundOut(analysis, spans) {
   stopAll();
-  const toks = analysis.toks.filter(t => t.s !== '_');
-  spans?.forEach((s, i) => analysis.toks[i].s !== '_' && setTimeout(() => flash(s, 500), i * 350));
-  await playBlend(toks.map(t => t.s));
-  await sleep(500);
+  const my = speechGen();
+  for (let i = 0; i < analysis.toks.length; i++) {
+    const t = analysis.toks[i];
+    if (t.s === '_') continue;
+    if (spans?.[i]) flash(spans[i], 700);
+    await playSound(t.s);
+    await sleep(250);
+    if (speechGen() !== my) return;
+  }
+  await sleep(350);
+  if (speechGen() !== my) return;
   await say(analysis.word);
 }
 

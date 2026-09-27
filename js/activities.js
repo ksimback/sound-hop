@@ -2,7 +2,7 @@
 // Wrong answers get immediate correction (show + say the right answer) — the runner re-tests later.
 import { h, wordEl, slider, soundOut, shuffle, pick, sleep, flash, confetti } from './ui.js';
 import { PROMPTS, WRONG, PRAISE, LINES, TIPS, introScript, heartIntroScript, lessonOpening } from './narration.js';
-import { speak, say, playSound, playBlend, stopAll, ctxGet, micLevel, releaseMic } from './audio.js';
+import { speak, say, playSound, stopAll, ctxGet, micLevel, releaseMic } from './audio.js';
 import { keyLabel, keySound } from './phonics.js';
 import { SOUND } from './sounds.js';
 import { analyze, isHeartAt } from './lexicon.js';
@@ -164,18 +164,6 @@ A.firstSound = async (root, st) => {
     ready,
     onRight: () => speak([st.word, LINES.startsWith, { sound: s }]),
     onWrong: () => speak(WRONG.firstSound(st)),
-  });
-};
-
-A.oralBlend = async (root, st) => {
-  const sounds = st.entry.toks.filter(t => t.s !== '_').map(t => t.s);
-  const grid = h('div', { class: 'choices three' });
-  const { row, ready } = ask('oralBlend', st);
-  screenBody(root, h('div', { class: 'mascot small' }, '🐸'), row, grid);
-  return choose(grid, st.choices.map(e => ({ el: h('button', { class: 'tile pic' }, e.pic), correct: e === st.entry })), {
-    ready,
-    onRight: () => speak([{ blend: sounds }, LINES.makes, st.entry.word]),
-    onWrong: () => speak(WRONG.oralBlend(st)),
   });
 };
 

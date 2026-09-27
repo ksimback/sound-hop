@@ -90,6 +90,7 @@ function rms(d, s, n) { let x = 0; for (let i = s; i < s + n; i++) x += d[i] * d
 
 let current = [];
 let gen = 0; // bumped by stopAll so an in-progress narration stops cleanly
+export const speechGen = () => gen;
 export function stopAll() {
   gen++;
   current.forEach(s => { try { s.stop(); } catch (e) { } });

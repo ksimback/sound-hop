@@ -72,13 +72,11 @@ function pickWord(e, idx) {
   if (ds.length < 2) return null;
   return { type: 'pickWord', entry: e, choices: shuffle([e, ...ds]), item: 'w:' + e.word };
 }
-function oralBlend(idx) {
-  const pool = [...BANK.values()].filter(e => e.pic && e.toks.length === 3 && e.toks.every(t => t.s !== '_' && !['a:ae', 'e:ee'].includes(t.k)) && segment(e.word).length === 3);
-  const simple = pool.filter(e => e.toks.every(t => t.t.length === 1));
-  const e = pick(simple.length ? simple : pool);
-  if (!e) return null;
-  const ds = similar(e, simple.filter(x => x.pic !== e.pic), 2, 'pic');
-  return { type: 'oralBlend', entry: e, choices: shuffle([e, ...ds]) };
+// Listening practice before reading: a real word (natural voice) and its first sound,
+// for any sound already learned. (Stitching recorded sounds into words sounded too unnatural.)
+function listenFirst(idx) {
+  for (const k of shuffle(quizKeys(idx))) { const st = firstSound(k, idx); if (st) return st; }
+  return null;
 }
 function sentenceStep(idx, preferNew) {
   const all = sentencesAt(idx);
@@ -140,7 +138,7 @@ export function buildLevel(idx) {
     reviewKeys(idx, canRead ? 2 : 3).forEach(k => practice.push(tapSound(k, idx)));
     newKeys.forEach(k => practice.push(firstSound(k, idx)));
     if (!canRead) {
-      if (idx > 0) practice.push(oralBlend(idx), oralBlend(idx));
+      if (idx > 0) practice.push(listenFirst(idx), listenFirst(idx));
     } else {
       const fresh = shuffle(wordsAt(idx, { freshOnly: true }));
       const freshPics = fresh.filter(e => e.pic);
@@ -156,7 +154,7 @@ export function buildLevel(idx) {
 
   if (L.type === 'ready') {
     [['🐶', '🐟', 'dog', 'fish'], ['🚗', '✈️', 'car', 'plane'], ['🐱', '🎩', 'cat', 'hat'], ['☀️', '🌸', 'sun', 'flower']].forEach(([a, b, wa, wb]) => practice.push({ type: 'dir', a, b, wa, wb }));
-    for (let i = 0; i < 4; i++) practice.push(oralBlend(idx));
+    for (let i = 0; i < 4; i++) practice.push(listenFirst(idx));
     reviewKeys(idx, 3).forEach(k => practice.push(tapSound(k, idx)));
   }
 
@@ -177,7 +175,7 @@ export function buildLevel(idx) {
       const prevCompares = LEVELS.slice(0, idx).flatMap(l => l.compare ?? []);
       if (prevCompares.length) practice.push(compare(pick(prevCompares)));
     } else {
-      practice.push(oralBlend(idx), oralBlend(idx));
+      practice.push(listenFirst(idx), listenFirst(idx));
     }
   }
 
@@ -199,7 +197,7 @@ export function buildLevel(idx) {
 function interleave(steps) {
   const groups = {};
   steps.forEach(s => (groups[s.type] ??= []).push(s));
-  const order = ['tapSound', 'firstSound', 'heartPick', 'readWord', 'compare', 'pickWord', 'oralBlend', 'voice', 'sentence', 'yesno'];
+  const order = ['tapSound', 'firstSound', 'heartPick', 'readWord', 'compare', 'pickWord', 'voice', 'sentence', 'yesno'];
   const out = [];
   let added = true;
   while (added) {

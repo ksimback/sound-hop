@@ -31,7 +31,7 @@ export function lessonOpening(level, newKeys, returning, canRead) {
       parts.push("Let's begin!");
       return parts;
     }
-    case 'ready': return [hi, "Today we're going to practice two big reading skills.", 'First, reading from left to right, like a frog hopping across the lily pads.', 'Then, listening to sounds and putting them together to make a word.', "Let's begin!"];
+    case 'ready': return [hi, "Today we're going to practice reading from left to right, like a frog hopping across the lily pads.", "Then we'll listen for the first sound in some words.", "Let's begin!"];
     case 'heart': return [hi, "Today we're going to learn some heart words.", "Heart words are special words that don't follow the usual rules.", 'So we learn them by heart!', "Let's meet them."];
     case 'review': return [hi, 'Today is a practice day!', "We'll practice the sounds and words you already know, so they stay strong in your brain.", "Let's begin!"];
     case 'check': return [hi, "Today is a big check! It's a chance to show everything you've learned.", 'Take your time, and listen carefully. You can tap the speaker to hear things again.', "Let's begin!"];
@@ -86,12 +86,6 @@ export const PROMPTS = {
   firstSound: (st, first) => first
     ? ['Look at the picture.', 'This is:', st.word, P(300), 'Listen to the very first sound in', st.word, P(300), 'Now tap the letter that makes that first sound.']
     : ['This is:', st.word, P(300), 'What sound does', st.word, 'start with?'],
-  oralBlend: (st, first) => {
-    const b = { blend: st.entry.toks.filter(t => t.s !== '_').map(t => t.s) };
-    return first
-      ? ["Let's be sound detectives!", 'I will say the sounds of a word, slowly and stretched out.', 'Put the sounds together in your head, to make the word.', 'Then tap the picture that matches.', 'Listen:', b, P(500), 'What word is that?']
-      : ['Listen:', b, P(500), 'What word is that?'];
-  },
   dir: (st, first, target) => first
     ? ['We always read from left to right, like the arrow shows.', 'I will say two words stuck together.', 'Tap the pictures that are in the same order, going from left to right.', 'Which one says:', target]
     : ['Which one says:', target],
@@ -125,7 +119,6 @@ export const PROMPTS = {
 export const WRONG = {
   tapSound: (st) => { const s = S(keySound(st.key)); return ['Not quite.', 'Listen again:', s, P(300), 'This letter says', s, 'Tap it!']; },
   firstSound: (st) => [st.word, 'starts with', S(keySound(st.key)), P(300), 'Tap that letter!'],
-  oralBlend: (st) => { const b = { blend: st.entry.toks.filter(t => t.s !== '_').map(t => t.s) }; return ['Listen again:', b, P(300), 'That makes', st.entry.word, P(300), 'Tap the picture!']; },
   dir: (target) => ['Not quite. Hop from left to right:', target, 'Tap it!'],
   readWord: ["Not quite. Let's sound it out together."],
   pickWord: (st) => ['Not quite. Look at every letter.', 'This one says', st.entry.word, 'Tap it!'],
@@ -141,7 +134,6 @@ export const LINES = {
   sayItFast: 'Now say it fast!',
   tapPicture: 'Now tap the picture!',
   startsWith: 'starts with',
-  makes: 'makes',
   has: 'has',
   yes: 'Yes!',
   no: 'No way!',
