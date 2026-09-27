@@ -198,7 +198,7 @@ function soundRow(s) {
   function renderChoices() {
     const cur = soundSource(s.id);
     const btn = (label, src) => h('button', { class: 'pbtn' + (cur === src ? '' : ' alt'), onclick: () => choose(src) }, (cur === src ? '✓ ' : '▶ ') + label);
-    choices.replaceChildren(...hopperVersions(s.id).map((f, n) => btn(`Hopper ${n + 1}`, 'hopper:' + n)), hasRec(s.id) ? btn('Mine', 'mine') : null);
+    choices.replaceChildren(...hopperVersions(s.id).map((f, n) => btn(`Hopper ${n + 1}`, 'hopper:' + n)), ...(hasRec(s.id) ? [btn('Mine', 'mine')] : []));
   }
   renderChoices();
   let recording = false, timer;
