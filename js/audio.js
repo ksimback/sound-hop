@@ -1,6 +1,6 @@
-// Audio: parent-recorded phonemes (IndexedDB) played through Web Audio with silence trimmed,
-// so sounds chain together with no gaps (Mentava: never pause between sounds).
-// Whole words and instructions use the device's speech synthesis.
+// Audio. Letter sounds: Hopper's generated recordings (audio/s, three versions per sound)
+// or the parent's own recording (IndexedDB); the parent chooses per sound. Narration:
+// pre-generated clips (audio/n), with the device's speech synthesis as a fallback.
 import { SOUND } from './sounds.js';
 import { S } from './store.js';
 import { phraseHash } from './phrasekey.js';
@@ -26,8 +26,8 @@ async function tx(mode, fn) {
   });
 }
 export const getRec = (id) => tx('readonly', s => s.get(id));
-export async function setRec(id, blob) { await tx('readwrite', s => s.put(blob, id)); buffers.delete(id); recorded.add(id); }
-export async function delRec(id) { await tx('readwrite', s => s.delete(id)); buffers.delete(id); recorded.delete(id); }
+export async function setRec(id, blob) { await tx('readwrite', s => s.put(blob, id)); forget(id); recorded.add(id); }
+export async function delRec(id) { await tx('readwrite', s => s.delete(id)); forget(id); recorded.delete(id); }
 const recorded = new Set();
 export async function loadRecordedList() {
   const keys = await tx('readonly', s => s.getAllKeys());
@@ -53,15 +53,42 @@ export function unlock() {
   }
 }
 
+// ---------- Letter sounds: Hopper's versions or the parent's recording ----------
+let genSounds = {}; // id -> [file, ...] best first (tools/gen-sounds.mjs)
+export async function loadGenSounds() {
+  try { genSounds = await (await fetch('audio/s/manifest.json')).json(); } catch (e) { genSounds = {}; }
+}
+export const hopperVersions = (id) => genSounds[id] ?? [];
+// Which recording plays for a sound: 'mine' or 'hopper:N'. Default: Hopper's best version.
+export function soundSource(id) {
+  const choice = S().settings.soundSrc?.[id];
+  if (choice === 'mine' && recorded.has(id)) return 'mine';
+  const n = choice?.startsWith('hopper:') ? +choice.slice(7) : 0;
+  if (genSounds[id]?.[n]) return 'hopper:' + n;
+  if (genSounds[id]?.length) return 'hopper:0';
+  return recorded.has(id) ? 'mine' : null;
+}
+export const hasSound = (id) => soundSource(id) != null;
+
 const buffers = new Map();
-async function buffer(id) {
-  if (buffers.has(id)) return buffers.get(id);
-  const blob = await getRec(id);
-  if (!blob) return null;
-  const raw = await ctxGet().decodeAudioData(await blob.arrayBuffer());
-  const buf = trim(raw);
-  buffers.set(id, buf);
+const forget = (id) => { for (const k of buffers.keys()) if (k.startsWith(id + '|')) buffers.delete(k); };
+async function buffer(id, src = soundSource(id)) {
+  if (!src) return null;
+  const key = id + '|' + src;
+  if (buffers.has(key)) return buffers.get(key);
+  let bytes;
+  if (src === 'mine') { const blob = await getRec(id); if (!blob) return null; bytes = await blob.arrayBuffer(); }
+  else { const r = await fetch('audio/s/' + genSounds[id][+src.slice(7)]); if (!r.ok) return null; bytes = await r.arrayBuffer(); }
+  const raw = await ctxGet().decodeAudioData(bytes);
+  const buf = src === 'mine' ? trim(raw) : raw; // Hopper's versions are trimmed already
+  buffers.set(key, buf);
   return buf;
+}
+// Parent zone: hear a specific version.
+export async function previewSound(id, src) {
+  stopAll();
+  const b = await buffer(id, src);
+  if (b) playBuf(b);
 }
 
 // Trim leading/trailing silence so chained sounds have no gaps.
@@ -200,11 +227,10 @@ export function warm(parts) {
 }
 export async function downloadAllClips(onProgress) {
   const cache = await caches.open('soundhop-voice');
-  const list = [...clips];
+  const list = [...[...clips].map(h => `audio/n/${h}.mp3`), ...Object.values(genSounds).flat().map(f => `audio/s/${f}`)];
   let n = 0;
   for (let i = 0; i < list.length; i += 8) {
-    await Promise.all(list.slice(i, i + 8).map(async h => {
-      const url = `audio/n/${h}.mp3`;
+    await Promise.all(list.slice(i, i + 8).map(async url => {
       if (!(await cache.match(url))) { try { const r = await fetch(url); if (r.ok) await cache.put(url, r); } catch (e) { } }
       onProgress?.(++n, list.length);
     }));

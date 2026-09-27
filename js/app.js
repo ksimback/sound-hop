@@ -1,6 +1,6 @@
 import { h, shuffle, pick, sleep, confetti } from './ui.js';
 import { S, save, grade, finishLevel, markDay, addMinutes, reset, importJSON, box } from './store.js';
-import { unlock, loadRecordedList, say, stopAll, speak, loadClips } from './audio.js';
+import { unlock, loadRecordedList, say, stopAll, speak, loadClips, loadGenSounds } from './audio.js';
 import { LEVELS, STAGES } from './curriculum.js';
 import { buildLevel, buildWarmup } from './engine.js';
 import { ACTIVITIES, sfx } from './activities.js';
@@ -177,7 +177,7 @@ async function run(steps, { idx, title }) {
 // ---------- boot ----------
 async function boot() {
   try { await loadRecordedList(); } catch (e) { console.warn(e); }
-  await loadClips();
+  await Promise.all([loadClips(), loadGenSounds()]);
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => { });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => { });
   if (!S().onboarded) onboarding(app, () => go('home'));

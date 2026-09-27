@@ -5,7 +5,7 @@ import { SOUNDS, SOUND } from './sounds.js';
 import { LINES } from './narration.js';
 import { LEVELS, NO_QUIZ, knownAt } from './curriculum.js';
 import { keyLabel, keySound } from './phonics.js';
-import { startRecording, stopRecording, setRec, getRec, delRec, hasRec, playSound, say, releaseMic, unlock, loadVoices, voiceLabel, voiceQuality, resetVoice, loadRecordedList, clipCount, downloadAllClips } from './audio.js';
+import { startRecording, stopRecording, setRec, getRec, delRec, hasRec, playSound, say, releaseMic, unlock, hopperVersions, soundSource, previewSound, loadVoices, voiceLabel, voiceQuality, resetVoice, loadRecordedList, clipCount, downloadAllClips } from './audio.js';
 
 // Sounds in the order the child meets them, so parents can record the first ones first.
 function soundOrder() {
@@ -36,11 +36,11 @@ export function onboarding(app, done) {
       h('h2', {}, 'Welcome to Sound Hop'),
       h('div', { class: 'panel', style: { textAlign: 'left', maxWidth: '560px' } },
         h('p', {}, 'Sound Hop teaches reading the Mentava way: lowercase letters, letter ', h('b', {}, 'sounds'), ' (not names), smooth blending with no pauses, and moving on only after mastery.'),
-        h('p', {}, h('b', {}, 'One setup step matters a lot: '), 'record yourself saying the 44 sounds (about 10 minutes). Phone voices can’t say "mmm" or a crisp "t" on their own, and the book is clear that saying sounds exactly right, every time, is what makes blending easy. You can start with the first few and record the rest over time.'),
+        h('p', {}, 'Hopper the frog already knows all 44 letter sounds, said the way the book teaches them ("mmm", not "muh"). In Grown-ups → Sounds you can listen to each one, pick a different version, or record your own.'),
         h('p', {}, 'Aim for 10–20 minutes a day. Sit with your child at first, especially for the "keep your voice on" blending game.'),
         name),
       h('div', { class: 'row', style: { justifyContent: 'center' } },
-        h('button', { class: 'btn', onclick: () => { finish(); gate(() => { unlock(); location.hash = ''; parentZone(app, done, 'sounds'); }); } }, '🎙 Record sounds'),
+        h('button', { class: 'btn', onclick: () => { finish(); gate(() => { unlock(); location.hash = ''; parentZone(app, done, 'sounds'); }); } }, '🔊 Check the sounds'),
         h('button', { class: 'btn ghost', onclick: () => { finish(); done(); } }, 'Later')))));
   function finish() { S().child.name = name.value.trim(); S().onboarded = true; save(); }
 }
@@ -92,11 +92,10 @@ const TABS = {
 
   sounds() {
     const list = soundOrder();
-    const done = list.filter(s => hasRec(s.id)).length;
     const wrap = h('div');
     const head = h('div', { class: 'panel' },
-      h('p', {}, h('b', {}, `${done} / ${list.length} sounds recorded.`), ' Sounds are listed in the order your child meets them.'),
-      h('p', {}, 'How to record: tap 🎙, say the sound once, clearly, then tap ⏹. ',
+      h('p', {}, h('b', {}, 'Choose how each letter sound is said.'), ' Hopper has three versions of every sound (the best-rated is first). Tap a version to hear it; the one with ✓ is what your child hears. Sounds are listed in the order your child meets them.'),
+      h('p', {}, 'Prefer your own voice for a sound? Tap 🎙, say the sound once, clearly, then tap ⏹. ',
         h('b', {}, 'Hold'), ' sounds like mmm, sss, fff and vowels for about a second. Keep sounds like b, d, t, p, k, g, j, ch ', h('b', {}, 'short and crisp, with no "uh"'), '. Silence is trimmed automatically.'),
       h('p', { class: 'note' }, 'Tip: a quiet room, phone about a foot from your mouth. The book recommends the YouTube video "The Key Sounds of English – 44 Phonemes" by Sally Cole if you want a reference.'));
     wrap.append(head);
@@ -190,8 +189,18 @@ const TABS = {
 };
 
 function soundRow(s) {
-  const st = h('span', { class: hasRec(s.id) ? 'ok' : 'note' }, hasRec(s.id) ? '✓ recorded' : 'not recorded');
-  const play = h('button', { class: 'pbtn alt', disabled: !hasRec(s.id), onclick: () => { unlock(); playSound(s.id); } }, '▶');
+  const choices = h('div', { class: 'row', style: { marginTop: '6px', gap: '6px' } });
+  const choose = (src) => {
+    unlock();
+    S().settings.soundSrc = { ...(S().settings.soundSrc ?? {}), [s.id]: src };
+    save(); renderChoices(); previewSound(s.id, src);
+  };
+  function renderChoices() {
+    const cur = soundSource(s.id);
+    const btn = (label, src) => h('button', { class: 'pbtn' + (cur === src ? '' : ' alt'), onclick: () => choose(src) }, (cur === src ? '✓ ' : '▶ ') + label);
+    choices.replaceChildren(...hopperVersions(s.id).map((f, n) => btn(`Hopper ${n + 1}`, 'hopper:' + n)), hasRec(s.id) ? btn('Mine', 'mine') : null);
+  }
+  renderChoices();
   let recording = false, timer;
   const rec = h('button', { class: 'pbtn rec', onclick: async () => {
     unlock();
@@ -206,8 +215,8 @@ function soundRow(s) {
       releaseMic(); // iOS plays through the quiet earpiece while the mic is open
       if (blob && blob.size > 500) {
         await setRec(s.id, blob);
-        st.className = 'ok'; st.textContent = '✓ recorded'; play.disabled = false;
-        await sleep(150); playSound(s.id);
+        await sleep(150);
+        choose('mine'); // a fresh recording becomes the choice (tap a Hopper version to switch back)
       }
     }
   } }, '🎙');
@@ -216,9 +225,9 @@ function soundRow(s) {
   return h('div', { class: 'snd-row' },
     h('div', { class: 'g', style: label.length > 4 ? { fontSize: '18px' } : null }, label),
     h('div', {}, h('div', { class: 'tip' }, s.tip), h('div', { class: 'row', style: { marginTop: '4px' } },
-      h('button', { class: 'pbtn alt', onclick: () => say(ex[0], { rate: 0.7 }) }, `${ex[1]} ${ex[0]}`), st,
-      s.level != null ? h('span', { class: 'note' }, `· level ${s.level + 1}`) : null)),
-    h('div', { class: 'row' }, rec, play));
+      h('button', { class: 'pbtn alt', onclick: () => say(ex[0], { rate: 0.7 }) }, `${ex[1]} ${ex[0]}`),
+      s.level != null ? h('span', { class: 'note' }, `level ${s.level + 1}`) : null), choices),
+    h('div', { class: 'row' }, rec));
 }
 
 async function exportBackup() {
